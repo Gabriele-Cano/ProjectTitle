@@ -400,15 +400,25 @@ function AltBookStatusWidget:genSummaryGroup(width)
             return self.ui.document:getPageText(self.ui:getCurrentPage() or 1)
         end)
         if ok and page_text then
-            local lines = {}
-            for _, line in ipairs(page_text) do
-                local words = {}
-                for _, word in ipairs(line) do
-                    table.insert(words, word.word or "")
+            local words = {}
+            for _, item in ipairs(page_text) do
+                if type(item) == "table" then
+                    if item.word then
+                        -- Flat format (CRE/EPUB): each item is a word box {word=..., x0=..., y0=..., ...}
+                        if item.word ~= "" then
+                            table.insert(words, item.word)
+                        end
+                    else
+                        -- Nested format (PDF/MuPDF): each item is a line containing word boxes
+                        for _, word_box in ipairs(item) do
+                            if word_box and word_box.word and word_box.word ~= "" then
+                                table.insert(words, word_box.word)
+                            end
+                        end
+                    end
                 end
-                table.insert(lines, table.concat(words, " "))
             end
-            page_text_str = util.trim(table.concat(lines, "\n"))
+            page_text_str = util.trim(table.concat(words, " "))
         end
         if page_text_str ~= "" then
             local lang_attr = props.language and (" lang='" .. props.language .. "'") or ""
