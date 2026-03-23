@@ -394,8 +394,50 @@ function AltBookStatusWidget:genSummaryGroup(width)
     if props.description then
         html_contents = "<html lang='" .. props.language .. "'><body>" .. props.description .. "</body></html>"
     else
-        html_contents = "<html><body><h3 style='font-style: italic; color: #CCCCCC;'>" ..
-        _("No book description available.") .. "</h3></body></html>"
+        -- No description available: show the text on the current page instead
+        local page_text_str = ""
+        local ok, page_text = pcall(function()
+            return self.ui.document:getPageText(self.ui:getCurrentPage() or 1)
+        end)
+        if ok and page_text then
+            local words = {}
+            for _, item in ipairs(page_text) do
+                if type(item) == "table" then
+                    if item.word then
+                        -- Flat format (CRE/EPUB): each item is a word box {word=..., x0=..., y0=..., ...}
+                        if item.word ~= "" then
+                            table.insert(words, item.word)
+                        end
+                    else
+                        -- Nested format (PDF/MuPDF): each item is a line containing word boxes
+                        for _, word_box in ipairs(item) do
+                            if word_box and word_box.word and word_box.word ~= "" then
+                                table.insert(words, word_box.word)
+                            end
+                        end
+                    end
+                end
+            end
+            page_text_str = util.trim(table.concat(words, " "))
+        end
+        if page_text_str ~= "" then
+            local lang_attr = props.language and (" lang='" .. props.language .. "'") or ""
+            -- Escape HTML special characters (& must be first to avoid double-escaping)
+            local escaped = page_text_str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;")
+            -- Split into non-empty paragraphs to avoid empty <p></p> tags
+            local paras = {}
+            for para in escaped:gmatch("[^\n]+") do
+                local trimmed = util.trim(para)
+                if trimmed ~= "" then
+                    table.insert(paras, trimmed)
+                end
+            end
+            html_contents = "<html" .. lang_attr .. "><body><p>" ..
+                table.concat(paras, "</p><p>") .. "</p></body></html>"
+        else
+            html_contents = "<html><body><h3 style='font-style: italic; color: #CCCCCC;'>" ..
+                _("No book description available.") .. "</h3></body></html>"
+        end
     end
     self.input_note = ScrollHtmlWidget:new {
         width = width - Screen:scaleBySize(60),
