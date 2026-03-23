@@ -394,8 +394,40 @@ function AltBookStatusWidget:genSummaryGroup(width)
     if props.description then
         html_contents = "<html lang='" .. props.language .. "'><body>" .. props.description .. "</body></html>"
     else
-        html_contents = "<html><body><h3 style='font-style: italic; color: #CCCCCC;'>" ..
-        _("No book description available.") .. "</h3></body></html>"
+        -- No description available: show the text on the current page instead
+        local page_text_str = ""
+        local ok, page_text = pcall(function()
+            return self.ui.document:getPageText(self.ui:getCurrentPage() or 1)
+        end)
+        if ok and page_text then
+            local lines = {}
+            for _, line in ipairs(page_text) do
+                local words = {}
+                for _, word in ipairs(line) do
+                    table.insert(words, word.word or "")
+                end
+                table.insert(lines, table.concat(words, " "))
+            end
+            page_text_str = util.trim(table.concat(lines, "\n"))
+        end
+        if page_text_str ~= "" then
+            local lang_attr = props.language and (" lang='" .. props.language .. "'") or ""
+            -- Escape HTML special characters (& must be first to avoid double-escaping)
+            local escaped = page_text_str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;")
+            -- Split into non-empty paragraphs to avoid empty <p></p> tags
+            local paras = {}
+            for para in escaped:gmatch("[^\n]+") do
+                local trimmed = util.trim(para)
+                if trimmed ~= "" then
+                    table.insert(paras, trimmed)
+                end
+            end
+            html_contents = "<html" .. lang_attr .. "><body><p>" ..
+                table.concat(paras, "</p><p>") .. "</p></body></html>"
+        else
+            html_contents = "<html><body><h3 style='font-style: italic; color: #CCCCCC;'>" ..
+                _("No book description available.") .. "</h3></body></html>"
+        end
     end
     self.input_note = ScrollHtmlWidget:new {
         width = width - Screen:scaleBySize(60),
